@@ -1,4 +1,4 @@
-use attribute;
+use ::{attribute, field};
 use std::io::Read;
 use byteorder::{BigEndian, ReadBytesExt};
 use constant_pool::ConstantPool;
@@ -7,8 +7,9 @@ use field::FieldDescriptor;
 use field::FieldDescriptor::*;
 use class::ClassRef;
 use class::ClassRef::Symbolic;
+use method::ReturnDescriptor::*;
 use std::str::Chars;
-use std::iter::Enumerate;
+use std::iter::{Enumerate, Peekable};
 
 #[derive(Debug)]
 /// Raw data contained in a .class file
@@ -32,7 +33,7 @@ pub struct MethodDescriptor<'a> {
 #[derive(Debug)]
 /// Describes the return type of a method
 pub enum ReturnDescriptor<'a> {
-    Return(FieldDescriptor<'a>),
+    Value(FieldDescriptor<'a>),
     Void
 }
 
@@ -74,7 +75,8 @@ pub fn read_methods<'a, 'b, 'c>(input: &mut Read, length: u16, constant_pool: &C
     for _ in 0..length {
         let method_meta = method_info::new(input, constant_pool)?;
         let name = constant_pool.get_string_entry(method_meta.name_index);
-        let descriptor = parse_method_descriptor(constant_pool.get_string_entry(method_meta.descriptor_index));
+        let descriptor_str = constant_pool.get_string_entry(method_meta.descriptor_index);
+        let descriptor = parse_method_descriptor(&mut descriptor_str.chars().enumerate().peekable(), descriptor_str);
         let method_info = MethodInfo {
             name,
             parent_class: Symbolic(self_reference_name),
@@ -86,76 +88,31 @@ pub fn read_methods<'a, 'b, 'c>(input: &mut Read, length: u16, constant_pool: &C
     Ok(vector)
 }
 
-fn parse_method_descriptor(method_name: &str) -> MethodDescriptor {
+/// Parse a method signature from a valid method descriptor
+///
+/// <https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-4.html#jvms-4.3.3>
+fn parse_method_descriptor<'a, 'b>(chars: &mut Peekable<Enumerate<Chars<'a>>>, source: &'b str) -> MethodDescriptor<'b> {
+    if chars.next().unwrap().1 != '(' {
+        panic!("Method Descriptor not valid: {}", source);
+    }
     let mut parameters = Vec::new();
-    let mut chars = method_name.chars().enumerate();
-    if !chars.next().map_or(false, |i| i.1.eq(&'(')) {
-        panic!("Method Descriptor did not begin with '('", )
+    while chars.peek().unwrap().1 != ')' {
+        parameters.push(field::parse_field_descriptor(chars, source));
     }
-    loop {
-        let next_char = chars.next().unwrap().1;
-        print!("{}", next_char);
-        let next_parameter = match next_char {
-            'B' => Byte,
-            'C' => Character,
-            'D' => Double,
-            'F' => Float,
-            'I' => Integer,
-            'J' => Long,
-            'L' => parse_descriptor_reference(method_name, &mut chars),
-            'S' => Short,
-            'Z' => Boolean,
-            '[' => parse_descriptor_array(method_name, &mut chars),
-            ')' => break,
-            _ => panic!("Illegal Field Descriptor: {}, broke on: '{}'", method_name, next_char)
-        };
-
-        parameters.push(next_parameter);
-    }
-
-    MethodDescriptor { parameters, return_type: ReturnDescriptor::Void }
+    chars.next();
+    let return_type = parse_return_descriptor(chars, source);
+    MethodDescriptor { parameters, return_type }
 }
 
-fn parse_descriptor_reference<'a, 'b>(method_name: &'a str, chars: &'b mut Enumerate<Chars>) -> FieldDescriptor<'a> {
-    let startIndex = chars.next().unwrap().0;
-    let mut endIndex = startIndex;
-    loop {
-        let next = chars.next();
-        if next.unwrap().1 == ';' {
-            break
-        }
-        endIndex += 1;
+/// Parse a return value from the end of a method descriptor
+///
+/// This will either be a valid field descriptor or void (V)
+fn parse_return_descriptor<'a, 'b>(chars: &mut Peekable<Enumerate<Chars<'a>>>, source: &'b str) -> ReturnDescriptor<'b> {
+    if chars.peek().unwrap().1 == 'V' {
+        Void
+    } else {
+        Value(field::parse_field_descriptor(chars, source))
     }
-
-    Reference(Symbolic(&method_name[startIndex..endIndex]))
-}
-
-fn parse_descriptor_array<'a, 'b>(method_name: &'a str, chars: &'b mut Enumerate<Chars>) -> FieldDescriptor<'a> {
-    let mut next = chars.next();
-    let startIndex = next.unwrap().0 - 1;
-    let mut endIndex = startIndex + 1;
-    while next.unwrap().1 == '[' {
-        next = chars.next();
-        endIndex += 1;
-    }
-    match next.unwrap().1 {
-        'B' | 'C' | 'D' | 'F'| 'I' | 'J' | 'S' | 'Z' => {
-            endIndex += 1;
-            return Reference(Symbolic(&method_name[startIndex..endIndex]))
-        },
-        'L' => {
-            loop {
-                let next = chars.next();
-                endIndex += 1;
-                if next.unwrap().1 == ';' {
-                    break
-                }
-            }
-        },
-        _ => panic!("Illegal character in descriptor: {} -> '{}'", method_name, next.unwrap().1)
-    }
-
-    Reference(Symbolic(&method_name[startIndex..endIndex]))
 }
 
 /// <https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-4.html#jvms-4.6-200-A.1>

@@ -23,9 +23,10 @@ use std::fs;
 use std::ops::DerefMut;
 use std::io::Cursor;
 use field;
+use class_loader::ClassPath::{Directory, Jar};
 
 pub struct ClassLoader<'a, 'b: 'a> {
-    classpath: Vec<String>,
+    classpath: Vec<ClassPath>,
     class_map: HashMap<String, &'a RefCell<Class<'a>>>,
     strings: &'b Arena<String>,
     classes: &'a Arena<RefCell<Class<'a>>>
@@ -34,10 +35,21 @@ pub struct ClassLoader<'a, 'b: 'a> {
 impl<'b, 'a> ClassLoader<'a, 'b> {
     pub fn new(classpath: Vec<String>, allocator: &'a Arena<RefCell<Class<'a>>>, string_allocator: &'b Arena<String>) -> Self {
         ClassLoader {
-            classpath,
+            classpath: classpath.iter().map(|s| ClassLoader::to_classpath(s.as_str()).unwrap()).collect(),
             class_map: HashMap::new(),
             strings: string_allocator,
             classes: allocator
+        }
+    }
+
+    /// Converts a string to the appropriate ClassPath object
+    fn to_classpath(path: &str) -> Result<ClassPath, ClassLoadingError> {
+        if path.ends_with(".jar") {
+            let mut archive_file = File::open(path)?;
+            let mut archive = ZipArchive::new(archive_file)?;
+            Ok(Jar(archive))
+        } else {
+            Ok(Directory(path.to_owned()))
         }
     }
 
@@ -90,7 +102,8 @@ impl<'b, 'a> ClassLoader<'a, 'b> {
         while name_chars.next().map_or_else(|| false, |c| c == '[') {
             dimensions += 1;
         }
-        let component_type = field::parse_field_name(&class_name[(dimensions as usize)..]);
+        let component_type_str = &class_name[(dimensions as usize)..];
+        let component_type = field::parse_field_descriptor(&mut component_type_str.chars().enumerate().peekable(), component_type_str);
         ClassArray::new(dimensions, component_type, class_name)
     }
 
@@ -152,21 +165,22 @@ impl<'b, 'a> ClassLoader<'a, 'b> {
 
     /// Search the classpath for a specific class
     /// eg: java/lang/Object
-    fn search_classpath(&self, class_name: &str) -> Result<Vec<u8>, ClassLoadingError> {
+    fn search_classpath(&mut self, class_name: &str) -> Result<Vec<u8>, ClassLoadingError> {
         let mut class_file_name = String::from(class_name);
         class_file_name.push_str(".class");
         let target_path = Path::new(&class_file_name);
-        for classpath_dir in &self.classpath {
-            if classpath_dir.ends_with(".jar") {
-                if let Some(path) = ClassLoader::search_archive(
-                    classpath_dir.as_str(), class_file_name.as_str())? {
+        for classpath_dir in &mut self.classpath {
+            match classpath_dir {
+                Directory(path) =>
+                    if let Some(path) = ClassLoader::search_directory(
+                    path.as_str(), class_file_name.as_str())? {
                     return Ok(path)
-                }
-            } else {
-                if let Some(path) = ClassLoader::search_directory(
-                    classpath_dir, class_file_name.as_str())? {
-                    return Ok(path)
-                }
+                },
+                Jar(archive) =>
+                    if let Some(path) = ClassLoader::search_archive(
+                        archive, class_file_name.as_str())? {
+                        return Ok(path)
+                    }
             }
         }
 
@@ -189,9 +203,7 @@ impl<'b, 'a> ClassLoader<'a, 'b> {
     }
 
     /// Searches a .jar archive for a named class
-    fn search_archive(archive_path: &str, class_file_name: &str) -> Result<Option<Vec<u8>>, ClassLoadingError> {
-        let mut archive_file = File::open(archive_path)?;
-        let mut archive = ZipArchive::new(archive_file)?;
+    fn search_archive(archive: &mut ZipArchive<File>, class_file_name: &str) -> Result<Option<Vec<u8>>, ClassLoadingError> {
         let mut archive_entry = archive.by_name(class_file_name);
         if let Ok(zip_stream) = archive_entry {
             let bytes = zip_stream.bytes().map(|i| i.unwrap()).collect();
@@ -200,4 +212,9 @@ impl<'b, 'a> ClassLoader<'a, 'b> {
             Ok(None)
         }
     }
+}
+
+enum ClassPath {
+    Directory(String),
+    Jar(ZipArchive<File>)
 }

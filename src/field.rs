@@ -9,6 +9,8 @@ use class::ClassRef::Symbolic;
 use field::FieldDescriptor::*;
 use constant_pool::cp_info::*;
 use class_file::ClassFile;
+use std::iter::{Peekable, Enumerate};
+use std::str::Chars;
 
 #[derive(Debug)]
 /// Raw data contained in a .class file (ClassFile#fields[])
@@ -60,7 +62,8 @@ pub fn read_fields<'a, 'b, 'c>(input: &'b mut Read, length: u16, constant_pool: 
     for index in 0..length {
         let field_meta = field_info::new(input, constant_pool)?;
         let name = constant_pool.get_string_entry(field_meta.name_index);
-        let descriptor = parse_field_name(constant_pool.get_string_entry(field_meta.descriptor_index));
+        let descriptor_str = constant_pool.get_string_entry(field_meta.descriptor_index);
+        let descriptor = parse_field_descriptor(&mut descriptor_str.chars().enumerate().peekable(), descriptor_str);
         let field_info = FieldInfo {
             name,
             parent_class: Symbolic(self_reference_name),
@@ -72,24 +75,56 @@ pub fn read_fields<'a, 'b, 'c>(input: &'b mut Read, length: u16, constant_pool: 
     Ok(vector)
 }
 
-/// Parses a valid field descriptor
+/// Parse the type of a field from a valid field descriptor
 ///
 /// <https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-4.html#jvms-4.3.2>
-pub fn parse_field_name(name: &str) -> FieldDescriptor {
-    let mut chars = name.chars();
-    match chars.next().unwrap() {
+pub fn parse_field_descriptor<'a, 'b>(chars: &mut Peekable<Enumerate<Chars<'a>>>, source: &'b str) -> FieldDescriptor<'b> {
+    parse_field_descriptor_index(chars, source).0
+}
+
+/// internal method which gives the parsed field and the index of the last character accessed
+fn parse_field_descriptor_index<'a, 'b>(chars: &mut Peekable<Enumerate<Chars<'a>>>, source: &'b str) -> (FieldDescriptor<'b>, usize) {
+    let first_char = chars.peek().unwrap().1;
+    match first_char {
+        'L' => return parse_field_descriptor_reference(chars, source),
+        '[' => return parse_field_descriptor_array(chars, source),
+        _ => {}
+    }
+    let first_char = chars.next().unwrap();
+    (match first_char.1 {
         'B' => Byte,
         'C' => Character,
         'D' => Double,
         'F' => Float,
         'I' => Integer,
         'J' => Long,
-        'L' => Reference(Symbolic(&name[1..(name.len()-1)])),
         'S' => Short,
         'Z' => Boolean,
-        '[' => Reference(Symbolic(name)),
-        _   => panic!("Illegal Field Descriptor: {}", name)
+
+        _ => panic!("Illegal character in field descriptor: {} -> '{}'", source, first_char.1)
+    }, first_char.0)
+}
+
+/// parse a reference type (eg `Ljava/lang/Object;`)
+fn parse_field_descriptor_reference<'a, 'b>(chars: &mut Peekable<Enumerate<Chars<'a>>>, source: &'b str) -> (FieldDescriptor<'b>, usize) {
+    let first = chars.next().unwrap();
+    let second_index = first.0 + 1;
+    let mut last_index = second_index;
+    while chars.next().unwrap().1 != ';' {
+        last_index += 1;
     }
+    (Reference(Symbolic(&source[second_index..last_index])), last_index)
+}
+
+/// parse an array type (eg `[[I` or `[java/lang/Object;`)
+fn parse_field_descriptor_array<'a, 'b>(chars: &mut Peekable<Enumerate<Chars<'a>>>, source: &'b str) -> (FieldDescriptor<'b>, usize) {
+    let first_index = chars.peek().unwrap().0;
+    while chars.peek().unwrap().1 == '[' {
+        chars.next();
+    }
+    let component = parse_field_descriptor_index(chars, source);
+    let last_index = component.1 + 1;
+    (Reference(Symbolic(&source[first_index..last_index])), last_index)
 }
 
 impl field_info {
