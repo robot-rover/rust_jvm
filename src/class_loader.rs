@@ -132,35 +132,39 @@ impl<'b, 'a> ClassLoader<'a, 'b> {
 
         {
             if !class.has_super_class() {
-                return if class.get_name().eq("java/lang/Object") {
-                    Ok(class)
-                } else {
-                    Err(ClassFormatError(String::from("Class does not have direct superclass")))
+                if !class.get_name().eq("java/lang/Object") {
+                    return Err(ClassFormatError(String::from("Class does not have direct superclass")))
                 }
-            }
+            } else {
+                let super_class_ref = class.get_super_class().as_ref().unwrap();
 
-            let super_class_ref = class.get_super_class().as_ref().unwrap();
+                // Prevent this class from being loaded again, creating infinite recursion
+                inheritance_stack.insert(String::from(class.get_name()));
 
-            // Prevent this class from being loaded again, creating infinite recursion
-            inheritance_stack.insert(String::from(class.get_name()));
+                println!("During {}, recursing to superclass {:?}", class_name, class.get_super_class());
 
-            println!("During {}, recursing to superclass {:?}", class_name, class.get_super_class());
+                let super_class_name = match super_class_ref {
+                    Symbolic(index) => *index,
+                    Static(class_ref) => panic!("Class is being loaded but already linked: {:#?}", class_ref)
+                };
 
-            let super_class_name = match super_class_ref {
-                Symbolic(index) => *index,
-                Static(class_ref) => panic!("Class is being loaded but already linked: {:#?}", class_ref)
-            };
+                let super_class = self.create_class_rec(super_class_name, inheritance_stack);
 
-            let super_class = self.create_class_rec(super_class_name, inheritance_stack);
+                let is_interface = super_class.borrow().get_access_flags().intersects(ClassAccessFlag::ACC_INTERFACE);
 
-            let is_interface = super_class.borrow().get_access_flags().intersects(ClassAccessFlag::ACC_INTERFACE);
+                if is_interface {
+                    return Err(IncompatibleClassChangeError)
+                }
 
-            if is_interface {
-                return Err(IncompatibleClassChangeError)
+
             }
         }
 
         Ok(class)
+    }
+
+    fn link_class(&mut self, class: &mut ClassFile<'a>) {
+
     }
 
     /// Search the classpath for a specific class

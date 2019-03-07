@@ -17,7 +17,7 @@ pub struct attribute_info {
 }
 
 #[derive(Debug)]
-enum attribute_info_Data {
+pub enum attribute_info_Data {
     ConstantValue_attribute {
         constantvalue_index: u16
     },
@@ -423,6 +423,10 @@ impl attribute_info {
             attribute_length,
             info
         })
+    }
+
+    pub fn get_data(&self) -> &attribute_info_Data {
+        &self.info
     }
 
     fn parse_info(input: &mut Read, constant_pool: &ConstantPool, attribute_length: u32, name: &str) -> Result<attribute_info_Data, ClassLoadingError> {

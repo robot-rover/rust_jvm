@@ -4,8 +4,6 @@ use constant_pool::cp_info::*;
 use byteorder::ReadBytesExt;
 use cesu8::from_java_cesu8;
 use class_file::ClassLoadingError;
-use class::ClassRef;
-use class::ClassRef::Symbolic;
 use std::ops::Index;
 use typed_arena::Arena;
 

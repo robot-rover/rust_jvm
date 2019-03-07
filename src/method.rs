@@ -4,12 +4,15 @@ use byteorder::{BigEndian, ReadBytesExt};
 use constant_pool::ConstantPool;
 use class_file::ClassLoadingError;
 use field::FieldDescriptor;
-use field::FieldDescriptor::*;
+use attribute::attribute_info_Data::*;
 use class::ClassRef;
 use class::ClassRef::Symbolic;
 use method::ReturnDescriptor::*;
 use std::str::Chars;
 use std::iter::{Enumerate, Peekable};
+use attribute::attribute_info;
+use method;
+use class_file::ClassLoadingError::ClassFormatError;
 
 #[derive(Debug)]
 /// Raw data contained in a .class file
@@ -50,7 +53,7 @@ pub struct MethodInfo<'a> {
     name: &'a str,
     parent_class: ClassRef<'a>,
     descriptor: MethodDescriptor<'a>,
-    code: Vec<u8>
+    code: Option<Vec<u8>>
 }
 
 impl method_info {
@@ -77,15 +80,25 @@ pub fn read_methods<'a, 'b, 'c>(input: &mut Read, length: u16, constant_pool: &C
         let name = constant_pool.get_string_entry(method_meta.name_index);
         let descriptor_str = constant_pool.get_string_entry(method_meta.descriptor_index);
         let descriptor = parse_method_descriptor(&mut descriptor_str.chars().enumerate().peekable(), descriptor_str);
+        let code = method::get_code(&method_meta.attributes);
         let method_info = MethodInfo {
             name,
             parent_class: Symbolic(self_reference_name),
             descriptor,
-            code: vec![]
+            code
         };
         vector.push(method_info);
     }
     Ok(vector)
+}
+
+fn get_code(attributes: &Vec<attribute_info>) -> Option<Vec<u8>> {
+    for info in attributes.iter() {
+        if let Code_attribute { code, .. } = info.get_data() {
+            return Some(code.clone());
+        }
+    }
+    None
 }
 
 /// Parse a method signature from a valid method descriptor

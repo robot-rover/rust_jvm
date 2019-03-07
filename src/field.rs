@@ -7,8 +7,6 @@ use class_file::ClassLoadingError;
 use class::ClassRef;
 use class::ClassRef::Symbolic;
 use field::FieldDescriptor::*;
-use constant_pool::cp_info::*;
-use class_file::ClassFile;
 use std::iter::{Peekable, Enumerate};
 use std::str::Chars;
 

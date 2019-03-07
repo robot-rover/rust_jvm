@@ -34,8 +34,6 @@ use class::ClassAccessFlag;
 use class::ClassRef;
 use class::ClassRef::Symbolic;
 use constant_pool::cp_info;
-use field::FieldRef;
-use field::field_info;
 use typed_arena::Arena;
 use field::FieldInfo;
 
@@ -72,6 +70,10 @@ impl<'a> ClassFile<'a> {
 
     pub fn has_super_class(&self) -> bool {
         self.super_class.is_some()
+    }
+
+    pub fn resolve_super_class(&mut self) -> &mut Option<ClassRef<'a>> {
+        &mut self.super_class
     }
 
     pub fn get_access_flags(&self) -> ClassAccessFlag {
