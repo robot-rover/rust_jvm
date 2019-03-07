@@ -1,9 +1,9 @@
 #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
 
-use std::io;
 use class_loader::ClassLoader;
+use std::io;
+use std::time::SystemTime;
 use typed_arena::Arena;
-use std::time::{SystemTime};
 
 extern crate byteorder;
 extern crate cesu8;
@@ -13,17 +13,17 @@ extern crate core;
 extern crate typed_arena;
 extern crate zip;
 
-mod constant_pool;
-mod class_file;
 mod attribute;
-mod field;
-mod method;
-mod class_loader;
 mod class;
 mod class_array;
+mod class_file;
+mod class_loader;
+mod constant_pool;
+mod field;
+mod method;
 
 #[allow(unused_variables)]
-fn main() -> io::Result<()>{
+fn main() -> io::Result<()> {
     let start = SystemTime::now();
     println!("Hello, world!");
     let mut class_path = Vec::new();

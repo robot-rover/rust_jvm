@@ -1,14 +1,14 @@
-use class_file::ClassFile;
-use class_array::ClassArray;
 use class::Class::*;
+use class::ClassRef::{Static, Symbolic};
+use class_array::ClassArray;
+use class_file::ClassFile;
 use std::cell::RefCell;
 use std::clone::Clone;
-use class::ClassRef::{Symbolic, Static};
 
 #[derive(Debug)]
 pub enum Class<'a> {
     File(ClassFile<'a>),
-    Array(ClassArray<'a>)
+    Array(ClassArray<'a>),
 }
 
 #[derive(Debug)]
@@ -23,7 +23,7 @@ impl<'a> Clone for ClassRef<'a> {
     fn clone(&self) -> Self {
         match self {
             Symbolic(index) => Symbolic(index.clone()),
-            Static(class_ref) => Static(class_ref.clone())
+            Static(class_ref) => Static(class_ref.clone()),
         }
     }
 }
@@ -32,14 +32,14 @@ impl<'a> Class<'a> {
     pub fn get_name(&self) -> &str {
         match self {
             File(class) => class.get_name(),
-            Array(class) => class.get_name()
+            Array(class) => class.get_name(),
         }
     }
 
     pub fn get_access_flags(&self) -> ClassAccessFlag {
         match self {
             File(class) => class.get_access_flags(),
-            Array(class) => class.get_access_flags()
+            Array(class) => class.get_access_flags(),
         }
     }
 }

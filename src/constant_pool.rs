@@ -1,9 +1,9 @@
-use std::io::Read;
 use byteorder::BigEndian;
-use constant_pool::cp_info::*;
 use byteorder::ReadBytesExt;
 use cesu8::from_java_cesu8;
 use class_file::ClassLoadingError;
+use constant_pool::cp_info::*;
+use std::io::Read;
 use std::ops::Index;
 use typed_arena::Arena;
 
@@ -26,16 +26,14 @@ impl<'a> ConstantPool<'a> {
 #[derive(Debug)]
 pub enum cp_info<'a> {
     /// `name_index` -> constant_pool index of a `CONSTANT_Utf8_info` representing classname
-    CONSTANT_Class_info {
-        name_index: u16
-    },
+    CONSTANT_Class_info { name_index: u16 },
 
     /// `class_index` -> constant_pool index of a `CONSTANT_Class_info`
     ///
     /// `name_and_type_index` -> constant_pool index of a `CONSTANT_NameAndType_info`
     CONSTANT_Fieldref_info {
         class_index: u16,
-        name_and_type_index: u16
+        name_and_type_index: u16,
     },
 
     /// `class_index` -> constant_pool index of a `CONSTANT_Class_info`
@@ -43,7 +41,7 @@ pub enum cp_info<'a> {
     /// `name_and_type_index` -> constant_pool index of a `CONSTANT_NameAndType_info`
     CONSTANT_Methodref_info {
         class_index: u16,
-        name_and_type_index: u16
+        name_and_type_index: u16,
     },
 
     /// `class_index` -> constant_pool index of a `CONSTANT_Class_info`
@@ -51,49 +49,41 @@ pub enum cp_info<'a> {
     /// `name_and_type_index` -> constant_pool index of a `CONSTANT_NameAndType_info`
     CONSTANT_InterfaceMethodref_info {
         class_index: u16,
-        name_and_type_index: u16
+        name_and_type_index: u16,
     },
 
     /// `string_index` -> constant_pool index of a `CONSTANT_utf8_info`
-    CONSTANT_String_info {
-        string_index: u16
-    },
+    CONSTANT_String_info { string_index: u16 },
 
     /// `bytes` -> big-endian representation of an int
-    CONSTANT_Integer_info {
-        bytes: i32
-    },
+    CONSTANT_Integer_info { bytes: i32 },
 
     /// `bytes` -> representation of an IEEE 754 floating point single number
-    CONSTANT_Float_info {
-        bytes: f32
-    },
+    CONSTANT_Float_info { bytes: f32 },
 
     /// `value` -> 64 bit signed integer value
-    CONSTANT_Long_info {
-        value: i64
-    },
+    CONSTANT_Long_info { value: i64 },
 
     /// `value` ->  IEEE 754 floating point double value
-    CONSTANT_Double_info {
-        value: f64
-    },
+    CONSTANT_Double_info { value: f64 },
 
     /// `name_index` -> constant_pool index of a `CONSTANT_utf8_info` that is the name of a method or field
     ///
     /// `descriptor_index` -> constant_pool index of a `CONSTANT_utf8_info` that is a method or field descriptor
     CONSTANT_NameAndType_info {
         name_index: u16,
-        descriptor_index: u16
+        descriptor_index: u16,
     },
 
     /// `bytes` -> bytes of the string
-    CONSTANT_Utf8_info {
-        bytes: &'a str
-    }
+    CONSTANT_Utf8_info { bytes: &'a str },
 }
 
-pub fn read_constant_pool<'a, 'b>(input: &'b mut Read, constant_pool_count: u16, string_allocator: &'a Arena<String>) -> Result<ConstantPool<'a>, ClassLoadingError> {
+pub fn read_constant_pool<'a, 'b>(
+    input: &'b mut Read,
+    constant_pool_count: u16,
+    string_allocator: &'a Arena<String>,
+) -> Result<ConstantPool<'a>, ClassLoadingError> {
     let mut iter = constant_pool_count - 1;
     let mut pool = Vec::with_capacity(constant_pool_count as usize);
     pool.push(Option::None);
@@ -115,27 +105,41 @@ pub fn read_constant_pool<'a, 'b>(input: &'b mut Read, constant_pool_count: u16,
 }
 
 impl<'a> cp_info<'a> {
-    fn new(input: &mut Read, allocator: &'a Arena<String>) -> Result<cp_info<'a>, ClassLoadingError> {
+    fn new(
+        input: &mut Read,
+        allocator: &'a Arena<String>,
+    ) -> Result<cp_info<'a>, ClassLoadingError> {
         let tag = input.read_u8()?;
         Ok(match tag {
             7 => {
                 let class_index = input.read_u16::<BigEndian>()?;
-                CONSTANT_Class_info { name_index: class_index }
+                CONSTANT_Class_info {
+                    name_index: class_index,
+                }
             }
             9 => {
                 let class_index = input.read_u16::<BigEndian>()?;
                 let name_and_type_index = input.read_u16::<BigEndian>()?;
-                CONSTANT_Fieldref_info { class_index, name_and_type_index }
+                CONSTANT_Fieldref_info {
+                    class_index,
+                    name_and_type_index,
+                }
             }
             10 => {
                 let class_index = input.read_u16::<BigEndian>()?;
                 let name_and_type_index = input.read_u16::<BigEndian>()?;
-                CONSTANT_Methodref_info { class_index, name_and_type_index }
+                CONSTANT_Methodref_info {
+                    class_index,
+                    name_and_type_index,
+                }
             }
             11 => {
                 let class_index = input.read_u16::<BigEndian>()?;
                 let name_and_type_index = input.read_u16::<BigEndian>()?;
-                CONSTANT_InterfaceMethodref_info { class_index, name_and_type_index }
+                CONSTANT_InterfaceMethodref_info {
+                    class_index,
+                    name_and_type_index,
+                }
             }
             8 => {
                 let string_index = input.read_u16::<BigEndian>()?;
@@ -161,7 +165,10 @@ impl<'a> cp_info<'a> {
             12 => {
                 let name_index = input.read_u16::<BigEndian>()?;
                 let descriptor_index = input.read_u16::<BigEndian>()?;
-                CONSTANT_NameAndType_info {name_index, descriptor_index}
+                CONSTANT_NameAndType_info {
+                    name_index,
+                    descriptor_index,
+                }
             }
             1 => {
                 let length = input.read_u16::<BigEndian>()?;
@@ -169,10 +176,11 @@ impl<'a> cp_info<'a> {
                 input.read_exact(&mut bytes)?;
                 let string = from_java_cesu8(&bytes)?;
                 let reference = allocator.alloc(string.to_string());
-                CONSTANT_Utf8_info { bytes: reference.as_str() }
+                CONSTANT_Utf8_info {
+                    bytes: reference.as_str(),
+                }
             }
-            _ => panic!("Unknown Constant Pool Tag parsed: {}", tag)
+            _ => panic!("Unknown Constant Pool Tag parsed: {}", tag),
         })
     }
 }
-

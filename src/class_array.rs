@@ -1,26 +1,30 @@
+use class::Class;
 use class::ClassAccessFlag;
 use class::ClassRef;
-use std::cell::RefCell;
-use class::Class;
-use field::FieldRef;
-use field::FieldDescriptor::Reference;
 use field::FieldDescriptor;
+use field::FieldDescriptor::Reference;
+use field::FieldRef;
+use std::cell::RefCell;
 
 #[derive(Debug)]
 pub struct ClassArray<'a> {
     dimensions: u8,
     component_type: FieldDescriptor<'a>,
     access_flags: ClassAccessFlag,
-    name: String
+    name: String,
 }
 
 impl<'a> ClassArray<'a> {
-    pub fn new(dimensions: u8, component_type: FieldDescriptor<'a>, class_name: &str) -> ClassArray<'a> {
+    pub fn new(
+        dimensions: u8,
+        component_type: FieldDescriptor<'a>,
+        class_name: &str,
+    ) -> ClassArray<'a> {
         ClassArray {
             dimensions,
             component_type,
             access_flags: ClassAccessFlag::ACC_PUBLIC,
-            name: class_name.to_owned()
+            name: class_name.to_owned(),
         }
     }
 
