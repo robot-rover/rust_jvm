@@ -123,20 +123,20 @@ pub enum attribute_info_Data {
 }
 
 #[derive(Debug)]
-struct bootstrap_method {
+pub struct bootstrap_method {
     bootstrap_method_ref: u16,
     num_bootstrap_arguments: u16,
     bootstrap_arguments: Vec<u16>,
 }
 
 #[derive(Debug)]
-struct annotation_list {
+pub struct annotation_list {
     num_annotations: u16,
     annotations: Vec<annotation>,
 }
 
 #[derive(Debug)]
-struct annotation {
+pub struct annotation {
     type_index: u16,
     num_element_value_pairs: u16,
     element_value_pairs: Vec<element_value_pair>,
@@ -170,7 +170,7 @@ struct element_value_pair {
 }
 
 #[derive(Debug)]
-struct element_value {
+pub struct element_value {
     tag: u8,
     value: element_value_data,
 }
@@ -207,7 +207,7 @@ impl element_value {
 }
 
 #[derive(Debug)]
-enum element_value_data {
+pub enum element_value_data {
     const_value_index(u16),
     enum_const_value {
         type_name_index: u16,
@@ -222,7 +222,7 @@ enum element_value_data {
 }
 
 #[derive(Debug)]
-struct local_variable_table_entry {
+pub struct local_variable_table_entry {
     start_pc: u16,
     length: u16,
     name_index: u16,
@@ -231,7 +231,7 @@ struct local_variable_table_entry {
 }
 
 #[derive(Debug)]
-struct local_variable_type_table_entry {
+pub struct local_variable_type_table_entry {
     start_pc: u16,
     length: u16,
     name_index: u16,
@@ -240,13 +240,13 @@ struct local_variable_type_table_entry {
 }
 
 #[derive(Debug)]
-struct line_number_table_entry {
+pub struct line_number_table_entry {
     start_pc: u16,
     line_number: u16,
 }
 
 #[derive(Debug)]
-struct inner_class {
+pub struct inner_class {
     inner_class_info_index: u16,
     outer_class_info_index: u16,
     inner_name_index: u16,
@@ -254,7 +254,7 @@ struct inner_class {
 }
 
 #[derive(Debug)]
-struct stack_map_frame {
+pub struct stack_map_frame {
     frame_type: u8,
     frame_data: stack_map_frame_data,
 }
@@ -721,7 +721,7 @@ impl attribute_info {
 }
 
 #[derive(Debug)]
-struct exception_info {
+pub struct exception_info {
     start_pc: u16,
     end_pc: u16,
     handler_pc: u16,

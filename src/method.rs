@@ -2,9 +2,7 @@ use attribute::attribute_info;
 use attribute::attribute_info_Data::*;
 use byteorder::{BigEndian, ReadBytesExt};
 use class::ClassRef;
-use class::ClassRef::Symbolic;
 use class_file::ClassLoadingError;
-use class_file::ClassLoadingError::ClassFormatError;
 use constant_pool::ConstantPool;
 use field::FieldDescriptor;
 use method;
@@ -13,6 +11,7 @@ use std::io::Read;
 use std::iter::{Enumerate, Peekable};
 use std::str::Chars;
 use {attribute, field};
+use class::ClassRef::Symbolic;
 
 #[derive(Debug)]
 /// Raw data contained in a .class file

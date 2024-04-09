@@ -1,62 +1,49 @@
-use class::Class;
 use class::Class::*;
-use class::ClassAccessFlag;
-use class::ClassRef::{Static, Symbolic};
+use class::{ClassAccessFlag, Class, ClassRef};
 use class_array::ClassArray;
 use class_file::ClassFile;
 use class_file::ClassLoadingError;
 use class_file::ClassLoadingError::*;
-use class_loader::ClassPath::{Directory, Jar};
-use constant_pool::cp_info::*;
 use field;
-use std::cell::RefCell;
+use std::cell::{RefCell, Ref};
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::fs;
-use std::fs::File;
-use std::io;
 use std::io::Cursor;
-use std::io::Read;
-use std::ops::DerefMut;
 use std::ops::Index;
-use std::path::Path;
-use std::path::PathBuf;
 use typed_arena::Arena;
-use zip::read::ZipFile;
-use zip::ZipArchive;
+use lazy::LazyResolve;
+use class_path::{ClassPath, search_classpath};
+use class_path::path_to_classpath;
+use field::FieldDescriptor::Reference;
+use field::FieldDescriptor;
 
-pub struct ClassLoader<'a, 'b: 'a> {
+pub struct ClassLoader<'a> {
     classpath: Vec<ClassPath>,
     class_map: HashMap<String, &'a RefCell<Class<'a>>>,
-    strings: &'b Arena<String>,
+    strings: &'a Arena<String>,
     classes: &'a Arena<RefCell<Class<'a>>>,
 }
 
-impl<'b, 'a> ClassLoader<'a, 'b> {
+impl<'a> LazyResolve<'a, RefCell<Class<'a>>> for &'a mut ClassLoader<'a> {
+    fn resolve(&mut self, name: &'a str) -> &'a RefCell<Class<'a>> {
+        self.create_class(name)
+    }
+}
+
+impl<'a> ClassLoader<'a> {
     pub fn new(
         classpath: Vec<String>,
         allocator: &'a Arena<RefCell<Class<'a>>>,
-        string_allocator: &'b Arena<String>,
+        string_allocator: &'a Arena<String>,
     ) -> Self {
         ClassLoader {
             classpath: classpath
                 .iter()
-                .map(|s| ClassLoader::to_classpath(s.as_str()).unwrap())
+                .map(|s| path_to_classpath(s.as_str()).unwrap())
                 .collect(),
             class_map: HashMap::new(),
             strings: string_allocator,
             classes: allocator,
-        }
-    }
-
-    /// Converts a string to the appropriate ClassPath object
-    fn to_classpath(path: &str) -> Result<ClassPath, ClassLoadingError> {
-        if path.ends_with(".jar") {
-            let mut archive_file = File::open(path)?;
-            let mut archive = ZipArchive::new(archive_file)?;
-            Ok(Jar(archive))
-        } else {
-            Ok(Directory(path.to_owned()))
         }
     }
 
@@ -74,7 +61,7 @@ impl<'b, 'a> ClassLoader<'a, 'b> {
 
     //TODO: Don't do 2 lookups if a class is already loaded
     /// create_class but with a Set to prevent cyclic inheritance
-    pub fn create_class_rec(
+    fn create_class_rec(
         &mut self,
         class_name: &'a str,
         inheritance_stack: &mut HashSet<String>,
@@ -90,7 +77,7 @@ impl<'b, 'a> ClassLoader<'a, 'b> {
 
     /// gets a class from the list of classes, panicking if it doesn't exist
     fn get_class(&self, class_name: &str) -> &'a RefCell<Class<'a>> {
-        self.class_map.index(class_name).clone()
+        self.class_map.index(class_name)
     }
 
     /// Create a new class from a name
@@ -117,11 +104,15 @@ impl<'b, 'a> ClassLoader<'a, 'b> {
         while name_chars.next().map_or_else(|| false, |c| c == '[') {
             dimensions += 1;
         }
-        let component_type_str = &class_name[(dimensions as usize)..];
-        let component_type = field::parse_field_descriptor(
+        let component_type_str: &'a str = &class_name[(dimensions as usize)..];
+        let mut component_type: FieldDescriptor<'a> = field::parse_field_descriptor(
             &mut component_type_str.chars().enumerate().peekable(),
             component_type_str,
         );
+        if let Reference(class_ref) = &mut component_type {
+            let class: &mut ClassRef<'a> = class_ref;
+            class.resolve(&mut self);
+        }
         ClassArray::new(dimensions, component_type, class_name)
     }
 
@@ -132,10 +123,10 @@ impl<'b, 'a> ClassLoader<'a, 'b> {
         inheritance_stack: &mut HashSet<String>,
     ) -> Result<ClassFile<'a>, ClassLoadingError> {
         println!("Attempting to load Class: {}", class_name);
-        let bytes = self.search_classpath(class_name)?;
+        let bytes = search_classpath(&mut self.classpath, class_name)?;
         let mut stream = Cursor::new(bytes);
         // Load and parse the the .class file
-        let class = ClassFile::new(&mut stream, self.strings)?;
+        let mut class = ClassFile::new(&mut stream, self.strings)?;
 
         // If this class has already been loaded
         if self.class_map.contains_key(class.get_name()) {
@@ -160,104 +151,35 @@ impl<'b, 'a> ClassLoader<'a, 'b> {
                     )));
                 }
             } else {
-                let super_class_ref = class.get_super_class().as_ref().unwrap();
-
                 // Prevent this class from being loaded again, creating infinite recursion
                 inheritance_stack.insert(String::from(class.get_name()));
+
+
+                let super_class_ref = class.resolve_super_class();
 
                 println!(
                     "During {}, recursing to superclass {:?}",
                     class_name,
-                    class.get_super_class()
+                    super_class_ref
                 );
 
-                let super_class_name = match super_class_ref {
-                    Symbolic(index) => *index,
-                    Static(class_ref) => {
-                        panic!("Class is being loaded but already linked: {:#?}", class_ref)
-                    }
-                };
+                let super_class = super_class_ref.as_mut().unwrap().resolve(&mut self);
 
-                let super_class = self.create_class_rec(super_class_name, inheritance_stack);
-
-                let is_interface = super_class
+                let super_is_interface = super_class
                     .borrow()
                     .get_access_flags()
                     .intersects(ClassAccessFlag::ACC_INTERFACE);
 
-                if is_interface {
+                if super_is_interface {
                     return Err(IncompatibleClassChangeError);
                 }
-            }
+
+
+            };
         }
 
         Ok(class)
     }
 
     fn link_class(&mut self, class: &mut ClassFile<'a>) {}
-
-    /// Search the classpath for a specific class
-    /// eg: java/lang/Object
-    fn search_classpath(&mut self, class_name: &str) -> Result<Vec<u8>, ClassLoadingError> {
-        let mut class_file_name = String::from(class_name);
-        class_file_name.push_str(".class");
-        let target_path = Path::new(&class_file_name);
-        for classpath_dir in &mut self.classpath {
-            match classpath_dir {
-                Directory(path) => {
-                    if let Some(path) =
-                        ClassLoader::search_directory(path.as_str(), class_file_name.as_str())?
-                    {
-                        return Ok(path);
-                    }
-                }
-                Jar(archive) => {
-                    if let Some(path) =
-                        ClassLoader::search_archive(archive, class_file_name.as_str())?
-                    {
-                        return Ok(path);
-                    }
-                }
-            }
-        }
-
-        // Could not find class anywhere in classpath
-        Err(NoClassDefFoundError)
-    }
-
-    /// Searches a filesystem folder structure for a named class
-    fn search_directory(
-        base_dir: &str,
-        class_file_name: &str,
-    ) -> Result<Option<Vec<u8>>, ClassLoadingError> {
-        let mut path = PathBuf::from(base_dir);
-        path.push(class_file_name);
-        println!("Loading {:?} from {:?}", class_file_name, path);
-        if path.exists() {
-            let file = File::open(path)?;
-            let bytes = file.bytes().map(|i| i.unwrap()).collect();
-            Ok(Some(bytes))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Searches a .jar archive for a named class
-    fn search_archive(
-        archive: &mut ZipArchive<File>,
-        class_file_name: &str,
-    ) -> Result<Option<Vec<u8>>, ClassLoadingError> {
-        let mut archive_entry = archive.by_name(class_file_name);
-        if let Ok(zip_stream) = archive_entry {
-            let bytes = zip_stream.bytes().map(|i| i.unwrap()).collect();
-            Ok(Some(bytes))
-        } else {
-            Ok(None)
-        }
-    }
-}
-
-enum ClassPath {
-    Directory(String),
-    Jar(ZipArchive<File>),
 }

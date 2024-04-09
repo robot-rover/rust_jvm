@@ -1,9 +1,9 @@
 use class::Class::*;
-use class::ClassRef::{Static, Symbolic};
 use class_array::ClassArray;
 use class_file::ClassFile;
 use std::cell::RefCell;
-use std::clone::Clone;
+use lazy::LazyResolve;
+use class::ClassRef::{Static, Symbolic};
 
 #[derive(Debug)]
 pub enum Class<'a> {
@@ -13,18 +13,28 @@ pub enum Class<'a> {
 
 #[derive(Debug)]
 pub enum ClassRef<'a> {
-    /// 0 -> name of the class
     Symbolic(&'a str),
-    /// 0-> a reference to the actual class object in memory
-    Static(&'a RefCell<Class<'a>>),
+    Static(&'a RefCell<Class<'a>>)
 }
 
-impl<'a> Clone for ClassRef<'a> {
-    fn clone(&self) -> Self {
-        match self {
-            Symbolic(index) => Symbolic(index.clone()),
-            Static(class_ref) => Static(class_ref.clone()),
+impl<'a> ClassRef<'a> {
+    pub fn get(&self) -> &'a RefCell<Class<'a>> {
+        if let Static(class_ref) = self {
+            class_ref
+        } else {
+            panic!("Accessed ClassRef that isn't resolved")
         }
+    }
+
+    pub fn resolve<'b, 'c, T>(&'b mut self, resolver: &'c mut T) -> &'a RefCell<Class<'a>>
+        where T: LazyResolve<'a, RefCell<Class<'a>>> {
+        let class_name = match self {
+            Symbolic(class_name) => *class_name,
+            Static(class_ref) => return class_ref
+        };
+
+        *self = Static(resolver.resolve(class_name));
+        self.get()
     }
 }
 

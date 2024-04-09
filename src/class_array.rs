@@ -1,10 +1,5 @@
-use class::Class;
 use class::ClassAccessFlag;
-use class::ClassRef;
 use field::FieldDescriptor;
-use field::FieldDescriptor::Reference;
-use field::FieldRef;
-use std::cell::RefCell;
 
 #[derive(Debug)]
 pub struct ClassArray<'a> {

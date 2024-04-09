@@ -1,4 +1,4 @@
-#![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
+#![allow(non_snake_case, non_camel_case_types, non_upper_case_globals, dead_code)]
 
 use class_loader::ClassLoader;
 use std::io;
@@ -13,11 +13,13 @@ extern crate core;
 extern crate typed_arena;
 extern crate zip;
 
+mod lazy;
 mod attribute;
 mod class;
 mod class_array;
 mod class_file;
 mod class_loader;
+mod class_path;
 mod constant_pool;
 mod field;
 mod method;

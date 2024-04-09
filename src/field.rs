@@ -1,14 +1,14 @@
 use attribute;
 use byteorder::BigEndian;
 use byteorder::ReadBytesExt;
-use class::ClassRef;
-use class::ClassRef::Symbolic;
 use class_file::ClassLoadingError;
 use constant_pool::ConstantPool;
 use field::FieldDescriptor::*;
 use std::io::Read;
 use std::iter::{Enumerate, Peekable};
 use std::str::Chars;
+use class::ClassRef::Symbolic;
+use class::ClassRef;
 
 #[derive(Debug)]
 /// Raw data contained in a .class file (ClassFile#fields[])
@@ -59,7 +59,7 @@ pub fn read_fields<'a, 'b, 'c>(
     input: &'b mut Read,
     length: u16,
     constant_pool: &'c ConstantPool<'a>,
-    self_reference_name: &'a str,
+    self_reference_name: &'a str
 ) -> Result<Vec<FieldInfo<'a>>, ClassLoadingError> {
     let mut vector = Vec::with_capacity(length as usize);
     for index in 0..length {
@@ -70,9 +70,10 @@ pub fn read_fields<'a, 'b, 'c>(
             &mut descriptor_str.chars().enumerate().peekable(),
             descriptor_str,
         );
+        let parent_class = Symbolic(self_reference_name);
         let field_info = FieldInfo {
             name,
-            parent_class: Symbolic(self_reference_name),
+            parent_class,
             descriptor,
             index,
         };

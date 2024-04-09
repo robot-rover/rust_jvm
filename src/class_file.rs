@@ -1,28 +1,6 @@
-/*
-ClassFile {
-    u4 magic;
-    u2 minor_version;
-    u2 major_version;
-    u2 constant_pool_count;
-    cp_info constant_pool[constant_pool_count-1];
-    u2 access_flags;
-    u2 this_class;
-    u2 super_class;
-    u2 interfaces_count;
-    u2 interfaces[interfaces_count];
-    u2 fields_count;
-    field_info fields[fields_count];
-    u2 methods_count;
-    method_info methods[methods_count];
-    u2 attributes_count;
-    attribute_info attributes[attributes_count];
-}*/
-
 use attribute;
 use byteorder::{BigEndian, ReadBytesExt};
-use class::ClassAccessFlag;
 use class::ClassRef;
-use class::ClassRef::Symbolic;
 use class_file::ClassLoadingError::*;
 use constant_pool::cp_info;
 use constant_pool::cp_info::*;
@@ -36,6 +14,8 @@ use std::convert::From;
 use std::io::ErrorKind;
 use std::io::Read;
 use typed_arena::Arena;
+use class::ClassAccessFlag;
+use class::ClassRef::Symbolic;
 
 #[derive(Debug)]
 pub struct ClassFile<'a> {
@@ -90,7 +70,7 @@ impl<'a> ClassFile<'a> {
 
     pub fn new<'b>(
         input: &'b mut Read,
-        string_allocator: &'a Arena<String>,
+        string_allocator: &'a Arena<String>
     ) -> Result<ClassFile<'a>, ClassLoadingError> {
         let magic = input.read_u32::<BigEndian>()?;
         let minor_version = input.read_u16::<BigEndian>()?;
@@ -178,7 +158,7 @@ pub enum ClassLoadingError {
 }
 
 impl From<zip::result::ZipError> for ClassLoadingError {
-    fn from(error: zip::result::ZipError) -> Self {
+    fn from(_: zip::result::ZipError) -> Self {
         panic!("Error reading zip file")
     }
 }
